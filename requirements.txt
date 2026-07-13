@@ -1,3 +1,8 @@
-Flask==3.0.3
-gunicorn==23.0.0
+python-telegram-bot[job-queue]==21.6
 psycopg[binary]==3.2.3
+psycopg-pool==3.2.3
+# tzdata garante o banco de fusos horários (America/Sao_Paulo) mesmo se a
+# imagem do Railway não tiver o tzdata do sistema operacional instalado.
+tzdata==2026.3
+# Flask é usado pelo dashboard_app.py (serviço separado do bot no Railway)
+Flask==3.1.3
