@@ -299,7 +299,11 @@ function renderPainel(ticket, mensagens, silencioso){
         const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
         if(m.sender_role === 'sistema') return `<div class="msg msg-sistema">${m.text || ''}<span class="msg-hora">${hora}</span></div>`;
         const classe = m.sender_role === 'atendente' ? 'msg-atendente' : 'msg-tecnico';
-        const conteudo = m.text || (m.message_type === 'foto' ? '📷 Foto enviada' : m.message_type === 'localizacao' ? '📍 Localização enviada' : '');
+        const ICONES_TIPO = {
+          photo: '📷 Foto enviada', document: '📄 Documento enviado',
+          video: '🎥 Vídeo enviado', voice: '🎤 Áudio enviado', location: '📍 Localização enviada',
+        };
+        const conteudo = m.text || ICONES_TIPO[m.message_type] || '(sem conteúdo)';
         return `<div class="msg ${classe}">${conteudo}<span class="msg-hora">${hora}</span></div>`;
       }).join('');
       corpo.scrollTop = corpo.scrollHeight;
