@@ -91,6 +91,10 @@
   .msg-atendente{ align-self:flex-end; background:var(--fiber); color:#fff; border-bottom-right-radius:4px; }
   .msg-sistema{ align-self:center; background:transparent; color:var(--text-faint); font-size:11.5px; text-align:center; max-width:80%; }
   .msg-hora{ font-size:10px; opacity:0.7; margin-top:4px; display:block; font-family:var(--font-mono); }
+  .msg-foto{ padding:6px; }
+  .msg-foto img{ display:block; max-width:100%; max-height:280px; border-radius:9px; cursor:zoom-in; object-fit:cover; }
+  .msg-foto .msg-legenda{ padding:6px 6px 0; font-size:13px; }
+  .msg-foto .msg-hora{ padding:2px 6px 0; }
 
   .composer{ padding:14px 20px; border-top:1px solid var(--line); background:var(--surface); display:flex; gap:10px; }
   .composer textarea{
@@ -299,9 +303,24 @@ function renderPainel(ticket, mensagens, silencioso){
         const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
         if(m.sender_role === 'sistema') return `<div class="msg msg-sistema">${m.text || ''}<span class="msg-hora">${hora}</span></div>`;
         const classe = m.sender_role === 'atendente' ? 'msg-atendente' : 'msg-tecnico';
+
+        // Foto: mostra a imagem de verdade (buscada via proxy próprio, sem
+        // expor o token do bot pro navegador). Legenda (se tiver) some
+        // embaixo da imagem; sem legenda, só a foto mesmo.
+        if(m.message_type === 'photo' && m.file_id){
+          const legenda = m.text ? `<div class="msg-legenda">${m.text}</div>` : '';
+          return `<div class="msg ${classe} msg-foto">
+            <a href="/api/inbox/arquivo/${m.file_id}" target="_blank" rel="noopener">
+              <img src="/api/inbox/arquivo/${m.file_id}" alt="Foto enviada pelo técnico" loading="lazy">
+            </a>
+            ${legenda}
+            <span class="msg-hora">${hora}</span>
+          </div>`;
+        }
+
         const ICONES_TIPO = {
-          photo: '📷 Foto enviada', document: '📄 Documento enviado',
-          video: '🎥 Vídeo enviado', voice: '🎤 Áudio enviado', location: '📍 Localização enviada',
+          photo: '📷 Foto enviada', document: '📄 Documento enviado', video: '🎥 Vídeo enviado',
+          voice: '🎤 Áudio enviado', location: '📍 Localização enviada',
         };
         const conteudo = m.text || ICONES_TIPO[m.message_type] || '(sem conteúdo)';
         return `<div class="msg ${classe}">${conteudo}<span class="msg-hora">${hora}</span></div>`;
