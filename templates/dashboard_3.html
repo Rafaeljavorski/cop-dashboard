@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIP Telecom — Painel de Operações COP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+<script>
+  // Se o cdnjs falhar (já aconteceu — retornou 503 numa versão específica),
+  // tenta um CDN alternativo antes de desistir. document.write aqui é
+  // proposital: garante que o script alternativo carregue de forma síncrona,
+  // ANTES do restante da página tentar usar `Chart`.
+  if (typeof Chart === 'undefined') {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"><\/script>');
+  }
+</script>
+<style>
+  :root{
+    --bg:#F4F7F9;
+    --surface:#FFFFFF;
+    --surface-2:#EEF2F5;
+    --line:#DCE3E8;
+    --text:#16232C;
+    --text-dim:#5B6B76;
+    --text-faint:#93A2AB;
+    --fiber:#16A99C;
+    --fiber-dim: rgba(22,169,156,0.10);
+    --lime:#7CC44B;
+    --amber:#B8720E;
+    --green:#5FA83A;
+    --done:#2E4FD1;
+    --alert:#D6473A;
+    --radius:14px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(ellipse 1200px 600px at 15% -10%, rgba(22,169,156,0.05), transparent 60%),
+      radial-gradient(ellipse 900px 500px at 100% 0%, rgba(46,79,209,0.04), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    color:var(--text);
+    font-family:var(--font-body);
+    min-height:100vh;
+    line-height:1.4;
+  }
+  ::selection{ background:var(--fiber-dim); color:var(--fiber); }
+  a{ color:inherit; }
+  .wrap{ max-width:1320px; margin:0 auto; padding:22px 24px 64px; }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:16px; flex-wrap:wrap;
+    padding-bottom:18px; margin-bottom:22px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg, var(--fiber), var(--lime));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; color:#FFFFFF; font-size:15px;
+    box-shadow:0 2px 10px rgba(22,169,156,0.30);
+    flex-shrink:0;
+  }
+  .brand-text h1{
+    font-family:var(--font-display); font-size:16.5px; font-weight:600;
+    margin:0; letter-spacing:0.2px; color:var(--text);
+  }
+  .brand-text p{ margin:1px 0 0; font-size:12px; color:var(--text-dim); }
+  .live{
+    display:flex; align-items:center; gap:9px;
+    font-family:var(--font-mono); font-size:12.5px; color:var(--text-dim);
+    background:var(--surface); border:1px solid var(--line);
+    padding:8px 14px; border-radius:999px;
+  }
+  .live-dot{
+    width:8px; height:8px; border-radius:50%; background:var(--green);
+    animation:pulse 2.2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(95,168,58,0.45); }
+    70%{ box-shadow:0 0 0 7px rgba(95,168,58,0); }
+    100%{ box-shadow:0 0 0 0 rgba(95,168,58,0); }
+  }
+  @media (prefers-reduced-motion: reduce){ .live-dot{ animation:none; } }
+
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .kpi{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 20px; position:relative; overflow:hidden;
+  }
+  .kpi::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-color, var(--fiber)); }
+  .kpi .num{ font-family:var(--font-mono); font-size:32px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; line-height:1; }
+  .kpi .lbl{ margin-top:8px; font-size:12.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.6px; }
+  .kpi.aguardando{ --accent-color:var(--amber); } .kpi.aguardando .num{ color:var(--amber); }
+  .kpi.andamento{ --accent-color:var(--green); } .kpi.andamento .num{ color:var(--green); }
+  .kpi.finalizados{ --accent-color:var(--done); } .kpi.finalizados .num{ color:var(--done); }
+  .kpi.espera{ --accent-color:var(--alert); } .kpi.espera .num{ color:var(--alert); }
+
+  .panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px 20px; }
+  .panel + .panel{ margin-top:14px; }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .panel-title{ font-family:var(--font-display); font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; margin:0; }
+  .panel-title .dot{ width:7px; height:7px; border-radius:50%; background:var(--fiber); }
+  .panel-hint{ font-size:11.5px; color:var(--text-faint); }
+
+  .charts-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .chart-box{ position:relative; height:260px; }
+  .chart-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:13px; text-align:center; padding:20px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+  .legend-item{
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface-2); border:1px solid var(--line);
+    padding:5px 10px 5px 8px; border-radius:999px; cursor:pointer;
+    font-size:12px; color:var(--text-dim); transition:all .15s ease; user-select:none;
+  }
+  .legend-item:hover{ border-color:var(--fiber); color:var(--text); }
+  .legend-item.active{ background:var(--fiber-dim); border-color:var(--fiber); color:var(--fiber); box-shadow:0 1px 6px rgba(22,169,156,0.20); }
+  .legend-swatch{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .legend-count{ font-family:var(--font-mono); opacity:0.85; }
+
+  .volume-box{ height:150px; position:relative; }
+
+  .ranking{ display:flex; flex-direction:column; gap:8px; }
+  .rank-row{ display:grid; grid-template-columns:26px 1fr auto auto; align-items:center; gap:12px; padding:9px 12px; background:var(--surface-2); border-radius:10px; border:1px solid transparent; }
+  .rank-row:first-child{ border-color:rgba(22,169,156,0.3); }
+  .rank-pos{ font-family:var(--font-mono); color:var(--text-faint); font-size:12.5px; }
+  .rank-name{ font-size:13.5px; font-weight:500; }
+  .rank-total{ font-family:var(--font-mono); color:var(--fiber); font-size:13px; }
+  .rank-media{ font-family:var(--font-mono); color:var(--text-dim); font-size:12px; }
+  .empty-msg{ color:var(--text-faint); font-size:13px; padding:18px 4px; }
+
+  .filters{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  select, input[type="text"]{
+    font-family:var(--font-body); font-size:12.5px; color:var(--text);
+    background:var(--surface-2); border:1px solid var(--line); border-radius:9px;
+    padding:8px 12px; outline:none; transition:border-color .15s ease;
+  }
+  select:focus, input[type="text"]:focus{ border-color:var(--fiber); }
+  input[type="text"]{ width:230px; }
+  input[type="text"]::placeholder{ color:var(--text-faint); }
+  .clear-filters{
+    font-family:var(--font-body); font-size:12px; color:var(--fiber);
+    background:transparent; border:1px solid var(--fiber-dim); border-radius:9px;
+    padding:7px 12px; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .15s ease;
+  }
+  .clear-filters.show{ opacity:1; pointer-events:auto; }
+  .clear-filters:hover{ background:var(--fiber-dim); }
+
+  .table-scroll{ overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  table{ width:100%; border-collapse:collapse; font-size:12.8px; min-width:820px; }
+  thead th{
+    text-align:left; font-family:var(--font-body); font-weight:600; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.5px; color:var(--text-faint);
+    background:var(--surface-2); padding:10px 14px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  tbody td{ padding:10px 14px; border-bottom:1px solid var(--line); color:var(--text-dim); white-space:nowrap; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(22,169,156,0.045); }
+  td.proto{ font-family:var(--font-mono); color:var(--fiber); font-size:12.3px; }
+  td.nome{ color:var(--text); font-weight:500; }
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 9px; border-radius:999px; font-weight:500; }
+  .badge.aguardando{ background:rgba(184,114,14,0.14); color:var(--amber); }
+  .badge.em_atendimento{ background:rgba(95,168,58,0.14); color:var(--green); }
+  .badge.finalizado{ background:rgba(46,79,209,0.14); color:var(--done); }
+  .badge::before{ content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .table-foot{ display:flex; justify-content:space-between; align-items:center; padding:10px 2px 2px; font-size:11.5px; color:var(--text-faint); }
+
+  .search-row{ display:flex; gap:10px; margin-bottom:14px; }
+  .search-row input{ flex:1; max-width:420px; }
+  .search-status{ font-size:11.5px; color:var(--text-faint); align-self:center; }
+
+  footer{ text-align:center; margin-top:26px; font-size:11.5px; color:var(--text-faint); }
+
+  @media (max-width:900px){ .kpis{ grid-template-columns:repeat(2,1fr); } .charts-row{ grid-template-columns:1fr; } }
+  @media (max-width:560px){ .kpis{ grid-template-columns:1fr 1fr; } .kpi .num{ font-size:26px; } header{ align-items:flex-start; } }
+  :focus-visible{ outline:2px solid var(--fiber); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">CIP</div>
+      <div class="brand-text">
+        <h1>Painel de Operações COP</h1>
+        <p>CIP Telecom · fila de atendimentos em tempo real</p>
+      </div>
+    </div>
+    <div class="live">
+      <span class="live-dot"></span>
+      <span id="atualizado-em">carregando…</span>
+    </div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi aguardando"><div class="num" id="kpi-aguardando">–</div><div class="lbl">Aguardando agora</div></div>
+    <div class="kpi andamento"><div class="num" id="kpi-andamento">–</div><div class="lbl">Em atendimento agora</div></div>
+    <div class="kpi finalizados"><div class="num" id="kpi-finalizados">–</div><div class="lbl">Finalizados hoje</div></div>
+    <div class="kpi espera"><div class="num" id="kpi-espera">–</div><div class="lbl">Maior espera (min)</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="charts-row">
+      <div>
+        <div class="panel-head">
+          <h2 class="panel-title"><span class="dot"></span>Chamados por motivo</h2>
+          <span class="panel-hint">hoje · clique numa fatia pra filtrar</span>
+        </div>
+        <div class="chart-box"><canvas id="chart-motivo"></canvas><div class="chart-empty" id="chart-motivo-empty" style="display:none">Sem chamados hoje ainda.</div></div>
+        <div class="legend" id="legend-motivo"></div>
+      </div>
+      <div>
+        <div class="panel-head">
+          <h2 class="panel-title"><span class="dot"></span>Carga por atendente</h2>
+          <span class="panel-hint">finalizados hoje</span>
+        </div>
+        <div class="chart-box"><canvas id="chart-atendente"></canvas><div class="chart-empty" id="chart-atendente-empty" style="display:none">Ninguém finalizou chamado hoje ainda.</div></div>
+        <div class="legend" id="legend-atendente"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2 class="panel-title"><span class="dot"></span>Volume por hora — hoje</h2></div>
+    <div class="volume-box"><canvas id="chart-volume"></canvas></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title"><span class="dot"></span>Ranking do dia</h2>
+      <span class="panel-hint">total de finalizados · tempo médio de atendimento</span>
+    </div>
+    <div class="ranking" id="ranking"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title"><span class="dot"></span>Chamados de hoje</h2>
+    </div>
+    <div class="filters">
+      <select id="f-status">
+        <option value="">Todos os status</option>
+        <option value="aguardando">Aguardando</option>
+        <option value="em_atendimento">Em atendimento</option>
+        <option value="finalizado">Finalizado</option>
+      </select>
+      <button class="clear-filters" id="btn-clear">✕ limpar filtros</button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Protocolo</th><th>Técnico</th><th>Motivo</th><th>Contrato</th><th>Status</th><th>Atendente</th><th>Aberto em</th><th>Espera / Duração</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="table-foot"><span id="table-count">–</span><span>chamados criados hoje</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title"><span class="dot"></span>Buscar chamado</h2>
+      <span class="panel-hint">procura em todo o histórico, não só hoje</span>
+    </div>
+    <div class="search-row">
+      <input type="text" id="busca-input" placeholder="Protocolo, técnico, contrato, atendente…">
+      <span class="search-status" id="busca-status"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Protocolo</th><th>Técnico</th><th>Motivo</th><th>Contrato</th><th>Status</th><th>Atendente</th><th>Data</th></tr></thead>
+        <tbody id="tbody-busca"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-faint)">Digite algo acima pra buscar.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Painel independente, lê os mesmos dados do bot do Telegram · atualiza sozinho a cada 20s</footer>
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// Estado
+// ---------------------------------------------------------------
+let DADOS = null;
+let TICKETS_HOJE = [];
+let FILTRO = { categoria: null, atendente: null, status: '' };
+let chartMotivo, chartAtendente, chartVolume;
+let buscaTimer = null;
+
+const PALETA = ['#16A99C','#B8720E','#2E4FD1','#5FA83A','#D6473A','#8B5CF6','#0284C7','#DB2777','#7CC44B','#EA580C'];
+const corPara = (nome, lista) => PALETA[lista.indexOf(nome) % PALETA.length];
+const STATUS_LABEL = { aguardando:'Aguardando', em_atendimento:'Em atendimento', finalizado:'Finalizado' };
+
+// ---------------------------------------------------------------
+// Fetch + refresh loop
+// ---------------------------------------------------------------
+async function carregar(){
+  let data;
+  try{
+    const resp = await fetch('/api/dashboard');
+    data = await resp.json();
+  }catch(e){
+    document.getElementById('atualizado-em').textContent = 'Erro ao buscar dados — tentando de novo…';
+    console.error(e);
+    return;
+  }
+
+  DADOS = data;
+
+  // O backend não devolve `status` dentro de cada item (o filtro já é
+  // feito na query SQL) — marca aqui pra dar pra usar num filtro único.
+  TICKETS_HOJE = [
+    ...(data.aguardando||[]).map(t => ({...t, status:'aguardando'})),
+    ...(data.em_atendimento||[]).map(t => ({...t, status:'em_atendimento'})),
+    ...(data.finalizados||[]).map(t => ({...t, status:'finalizado'})),
+  ];
+
+  document.getElementById('atualizado-em').textContent = `Atualizado às ${data.atualizado_em}`;
+  document.getElementById('kpi-aguardando').textContent = data.resumo.aguardando;
+  document.getElementById('kpi-andamento').textContent = data.resumo.em_atendimento;
+  document.getElementById('kpi-finalizados').textContent = data.resumo.finalizados_hoje;
+  document.getElementById('kpi-espera').textContent = data.resumo.maior_espera;
+
+  // Os dados já chegaram e os KPIs já estão corretos nesse ponto — daqui
+  // pra frente é só desenho. Separado do try/catch acima de propósito: se
+  // algo falhar aqui (ex.: biblioteca de gráfico não carregou), o problema
+  // é visual, não de dados, e o aviso não deveria dizer "erro ao buscar".
+  try{
+    render();
+  }catch(e){
+    document.getElementById('atualizado-em').textContent =
+      typeof Chart === 'undefined'
+        ? 'Atualizado, mas os gráficos não carregaram (biblioteca indisponível)'
+        : 'Atualizado, mas houve um erro ao desenhar o painel';
+    console.error(e);
+  }
+}
+
+// ---------------------------------------------------------------
+// Filtro sobre TICKETS_HOJE
+// ---------------------------------------------------------------
+function ticketsFiltrados(ignorar){
+  return TICKETS_HOJE.filter(t => {
+    if(ignorar!=='categoria' && FILTRO.categoria && t.categoria !== FILTRO.categoria) return false;
+    if(ignorar!=='atendente' && FILTRO.atendente && t.atendente_nome !== FILTRO.atendente) return false;
+    if(FILTRO.status && t.status !== FILTRO.status) return false;
+    return true;
+  });
+}
+function algumFiltroAtivo(){ return !!(FILTRO.categoria || FILTRO.atendente || FILTRO.status); }
+
+// ---------------------------------------------------------------
+// Render geral
+// ---------------------------------------------------------------
+function render(){
+  renderMotivo();
+  renderAtendente();
+  renderVolume();
+  renderRanking();
+  renderTabela();
+  document.getElementById('btn-clear').classList.toggle('show', algumFiltroAtivo());
+}
+
+// Donut "por motivo" — usa por_fila (já vem pronto do backend, contagem de
+// TODOS os chamados criados hoje por categoria — não é afetado pelo filtro
+// de status, então sempre reflete o total do dia).
+function renderMotivo(){
+  const dados = (DADOS.por_fila || []).filter(d => d.categoria);
+  const labels = dados.map(d=>d.categoria);
+  const valores = dados.map(d=>d.total);
+  const cores = labels.map(l=>corPara(l, labels));
+
+  document.getElementById('chart-motivo-empty').style.display = labels.length ? 'none' : 'flex';
+
+  const ctx = document.getElementById('chart-motivo').getContext('2d');
+  if(chartMotivo) chartMotivo.destroy();
+  chartMotivo = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data:valores, backgroundColor:cores, borderColor:'#FFFFFF', borderWidth:2, hoverOffset:10,
+      offset: labels.map(l => l===FILTRO.categoria ? 14 : 0) }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'#FFFFFF', titleColor:'#16232C', bodyColor:'#16232C', borderColor:'#DCE3E8', borderWidth:1, padding:10 }},
+      onClick:(evt, els)=>{
+        if(!els.length) return;
+        const label = labels[els[0].index];
+        FILTRO.categoria = (FILTRO.categoria===label ? null : label);
+        render();
+      },
+      animation:{ duration:500 },
+    }
+  });
+
+  const legendEl = document.getElementById('legend-motivo');
+  legendEl.innerHTML = '';
+  labels.forEach((l,i)=>{
+    const div = document.createElement('div');
+    div.className = 'legend-item' + (l===FILTRO.categoria ? ' active' : '');
+    div.innerHTML = `<span class="legend-swatch" style="background:${cores[i]}"></span>${l} <span class="legend-count">${valores[i]}</span>`;
+    div.onclick = ()=>{ FILTRO.categoria = (FILTRO.categoria===l ? null : l); render(); };
+    legendEl.appendChild(div);
+  });
+}
+
+// Donut "por atendente" — usa ranking (finalizados hoje, já vem ordenado).
+function renderAtendente(){
+  const dados = (DADOS.ranking || []).filter(d => d.atendente_nome);
+  const labels = dados.map(d=>d.atendente_nome);
+  const valores = dados.map(d=>d.total);
+  const cores = labels.map(l=>corPara(l, labels));
+
+  document.getElementById('chart-atendente-empty').style.display = labels.length ? 'none' : 'flex';
+
+  const ctx = document.getElementById('chart-atendente').getContext('2d');
+  if(chartAtendente) chartAtendente.destroy();
+  chartAtendente = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data:valores, backgroundColor:cores, borderColor:'#FFFFFF', borderWidth:2, hoverOffset:10,
+      offset: labels.map(l => l===FILTRO.atendente ? 14 : 0) }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'#FFFFFF', titleColor:'#16232C', bodyColor:'#16232C', borderColor:'#DCE3E8', borderWidth:1, padding:10 }},
+      onClick:(evt, els)=>{
+        if(!els.length) return;
+        const label = labels[els[0].index];
+        FILTRO.atendente = (FILTRO.atendente===label ? null : label);
+        render();
+      },
+      animation:{ duration:500 },
+    }
+  });
+
+  const legendEl = document.getElementById('legend-atendente');
+  legendEl.innerHTML = '';
+  labels.forEach((l,i)=>{
+    const div = document.createElement('div');
+    div.className = 'legend-item' + (l===FILTRO.atendente ? ' active' : '');
+    div.innerHTML = `<span class="legend-swatch" style="background:${cores[i]}"></span>${l} <span class="legend-count">${valores[i]}</span>`;
+    div.onclick = ()=>{ FILTRO.atendente = (FILTRO.atendente===l ? null : l); render(); };
+    legendEl.appendChild(div);
+  });
+}
+
+// Volume por hora — reconstruído a partir dos 3 grupos de hoje (aguardando +
+// em_atendimento + finalizados), já que o backend não devolve isso pronto.
+function renderVolume(){
+  const base = ticketsFiltrados();
+  const buckets = {};
+  for(let h=0; h<24; h++){ buckets[h]=0; }
+  base.forEach(t=>{
+    if(!t.created_at) return;
+    const h = new Date(t.created_at).getHours();
+    buckets[h] = (buckets[h]||0)+1;
+  });
+  const labels = Object.keys(buckets).map(h=>`${String(h).padStart(2,'0')}h`);
+  const valores = Object.keys(buckets).map(h=>buckets[h]);
+
+  const ctx = document.getElementById('chart-volume').getContext('2d');
+  if(chartVolume) chartVolume.destroy();
+  chartVolume = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data:valores, backgroundColor:'#16A99C', borderRadius:4, maxBarThickness:28 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'#FFFFFF', titleColor:'#16232C', bodyColor:'#16232C', borderColor:'#DCE3E8', borderWidth:1 }},
+      scales:{
+        x:{ grid:{ display:false }, ticks:{ color:'#5B6B76', font:{ family:'IBM Plex Mono', size:10.5 }}},
+        y:{ beginAtZero:true, grid:{ color:'#EEF2F5' }, ticks:{ color:'#5B6B76', precision:0, font:{ family:'IBM Plex Mono', size:10.5 }}},
+      },
+      animation:{ duration:400 },
+    }
+  });
+}
+
+// Ranking — total vem de `ranking`; tempo médio calculado a partir de
+// `finalizados` (que já traz `duracao_min` pronto por chamado — o backend
+// usa "-" quando não dá pra calcular, então isso é filtrado aqui).
+function renderRanking(){
+  const somaMin = {}, contaMin = {};
+  (DADOS.finalizados || []).forEach(t=>{
+    if(!t.atendente_nome || typeof t.duracao_min !== 'number') return;
+    somaMin[t.atendente_nome] = (somaMin[t.atendente_nome]||0) + t.duracao_min;
+    contaMin[t.atendente_nome] = (contaMin[t.atendente_nome]||0) + 1;
+  });
+
+  const lista = (DADOS.ranking || []).filter(r=>r.atendente_nome);
+  const el = document.getElementById('ranking');
+  if(!lista.length){ el.innerHTML = '<div class="empty-msg">Nenhum atendimento finalizado hoje ainda.</div>'; return; }
+
+  el.innerHTML = lista.map((r,i)=>{
+    const media = contaMin[r.atendente_nome] ? Math.round(somaMin[r.atendente_nome]/contaMin[r.atendente_nome]) : null;
+    return `
+    <div class="rank-row">
+      <span class="rank-pos">${i+1 <= 3 ? ['🥇','🥈','🥉'][i] : `#${i+1}`}</span>
+      <span class="rank-name">${r.atendente_nome}</span>
+      <span class="rank-total">${r.total} finalizados</span>
+      <span class="rank-media">${media!=null ? `média ${media} min` : '–'}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTabela(){
+  const lista = ticketsFiltrados().slice(0,300);
+  const tbody = document.getElementById('tbody');
+  document.getElementById('table-count').textContent = `${lista.length} chamado(s)`;
+
+  if(!lista.length){
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:26px;color:var(--text-faint)">Nenhum chamado encontrado com esse filtro.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lista.map(t=>{
+    const dataAbertura = t.created_at ? new Date(t.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '–';
+    let tempo = '–';
+    if(t.status === 'aguardando') tempo = `${t.espera_min ?? 0} min esperando`;
+    else if(t.status === 'em_atendimento') tempo = `${t.tempo_atendimento_min ?? 0} min em atendimento`;
+    else if(t.status === 'finalizado') tempo = typeof t.duracao_min === 'number' ? `${t.duracao_min} min` : '–';
+    return `<tr>
+      <td class="proto">${t.protocolo}</td>
+      <td class="nome">${t.user_name||'–'}</td>
+      <td>${t.categoria||'–'}${t.subcategoria ? ' / '+t.subcategoria : ''}</td>
+      <td>${t.contrato||'–'}</td>
+      <td><span class="badge ${t.status}">${STATUS_LABEL[t.status]||t.status}</span></td>
+      <td>${t.atendente_nome||'–'}</td>
+      <td>${dataAbertura}</td>
+      <td>${tempo}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------
+// Busca (chama /api/search de verdade — cobre todo o histórico)
+// ---------------------------------------------------------------
+async function buscar(termo){
+  const statusEl = document.getElementById('busca-status');
+  const tbody = document.getElementById('tbody-busca');
+  if(!termo){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-faint)">Digite algo acima pra buscar.</td></tr>';
+    statusEl.textContent = '';
+    return;
+  }
+  statusEl.textContent = 'buscando…';
+  try{
+    const resp = await fetch(`/api/search?q=${encodeURIComponent(termo)}`);
+    const data = await resp.json();
+    const resultados = data.results || [];
+    statusEl.textContent = `${resultados.length} resultado(s)`;
+    if(!resultados.length){
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-faint)">Nada encontrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = resultados.map(t=>{
+      const data_f = t.created_at ? new Date(t.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '–';
+      return `<tr>
+        <td class="proto">${t.protocolo}</td>
+        <td class="nome">${t.user_name||'–'}</td>
+        <td>${t.categoria||'–'}${t.subcategoria ? ' / '+t.subcategoria : ''}</td>
+        <td>${t.contrato||'–'}</td>
+        <td><span class="badge ${t.status}">${STATUS_LABEL[t.status]||t.status}</span></td>
+        <td>${t.atendente_nome||'–'}</td>
+        <td>${data_f}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    statusEl.textContent = 'erro na busca';
+    console.error(e);
+  }
+}
+
+document.getElementById('busca-input').addEventListener('input', e=>{
+  clearTimeout(buscaTimer);
+  const termo = e.target.value.trim();
+  buscaTimer = setTimeout(()=>buscar(termo), 350); // debounce
+});
+
+// ---------------------------------------------------------------
+// Controles
+// ---------------------------------------------------------------
+document.getElementById('f-status').addEventListener('change', e=>{ FILTRO.status = e.target.value; render(); });
+document.getElementById('btn-clear').addEventListener('click', ()=>{
+  FILTRO = { categoria:null, atendente:null, status:'' };
+  document.getElementById('f-status').value = '';
+  render();
+});
+
+carregar();
+setInterval(carregar, 20000);
+</script>
+</body>
+</html>
