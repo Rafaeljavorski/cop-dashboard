@@ -4,9 +4,11 @@ psycopg-pool==3.2.3
 # tzdata garante o banco de fusos horários (America/Sao_Paulo) mesmo se a
 # imagem do Railway não tiver o tzdata do sistema operacional instalado.
 tzdata==2026.3
-# Os dois abaixo são usados pelo dashboard_app.py (serviço separado no
+# Os itens abaixo são usados pelo dashboard_app.py (serviço separado no
 # Railway) — gunicorn é o comando que o próprio serviço usa pra subir
 # (gunicorn dashboard_app:app --bind 0.0.0.0:$PORT), por isso é obrigatório
-# mesmo não aparecendo em nenhum "import" do código.
+# mesmo não aparecendo em nenhum "import" do código. requests é usado pra
+# falar direto com a API do Telegram a partir do painel/inbox.
 Flask==3.1.3
 gunicorn==26.0.0
+requests==2.34.2
