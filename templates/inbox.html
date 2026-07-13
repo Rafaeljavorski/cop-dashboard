@@ -1,1 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inbox — Painel COP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F7F9; --surface:#FFFFFF; --surface-2:#EEF2F5; --line:#DCE3E8;
+    --text:#16232C; --text-dim:#5B6B76; --text-faint:#93A2AB;
+    --fiber:#16A99C; --fiber-dim: rgba(22,169,156,0.10); --lime:#7CC44B;
+    --amber:#B8720E; --green:#5FA83A; --done:#2E4FD1; --alert:#D6473A;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif; --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden; }
+  body{ background:var(--bg); color:var(--text); font-family:var(--font-body); }
 
+  .app{ display:grid; grid-template-columns:340px 1fr; height:100vh; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{ background:var(--surface); border-right:1px solid var(--line); display:flex; flex-direction:column; min-width:0; }
+  .sidebar-head{ padding:16px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .quem{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .avatar{
+    width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg, var(--fiber), var(--lime));
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:13px; font-family:var(--font-display);
+  }
+  .quem-nome{ font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .quem-status{ font-size:11px; color:var(--green); display:flex; align-items:center; gap:5px; }
+  .quem-status::before{ content:''; width:6px; height:6px; border-radius:50%; background:var(--green); }
+  .btn-logout{
+    font-size:12px; color:var(--text-faint); text-decoration:none; border:1px solid var(--line);
+    padding:6px 10px; border-radius:8px; flex-shrink:0;
+  }
+  .btn-logout:hover{ color:var(--alert); border-color:var(--alert); }
+
+  .tabs{ display:flex; gap:6px; padding:12px 16px 0; }
+  .tab{
+    flex:1; text-align:center; padding:8px 6px; border-radius:9px; font-size:12px; font-weight:600;
+    color:var(--text-dim); background:var(--surface-2); cursor:pointer; border:1px solid transparent;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .tab.active{ background:var(--fiber-dim); color:var(--fiber); border-color:var(--fiber); }
+  .tab .count{ font-family:var(--font-mono); font-size:10.5px; opacity:0.85; }
+
+  .lista{ flex:1; overflow-y:auto; padding:10px; }
+  .conversa{
+    display:flex; gap:10px; padding:11px 10px; border-radius:11px; cursor:pointer; margin-bottom:3px;
+    border:1px solid transparent;
+  }
+  .conversa:hover{ background:var(--surface-2); }
+  .conversa.selecionada{ background:var(--fiber-dim); border-color:var(--fiber); }
+  .conversa .avatar{ background:var(--surface-2); color:var(--text-dim); }
+  .conversa-info{ min-width:0; flex:1; }
+  .conversa-nome{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conversa-preview{ font-size:11.5px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .conversa-meta{ display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0; }
+  .conversa-tempo{ font-size:10.5px; color:var(--text-faint); font-family:var(--font-mono); }
+  .badge-mini{ font-size:9.5px; padding:2px 7px; border-radius:999px; font-weight:600; white-space:nowrap; }
+  .badge-mini.espera{ background:rgba(184,114,14,0.14); color:var(--amber); }
+  .badge-mini.contrato{ background:var(--surface-2); color:var(--text-faint); }
+  .vazio{ text-align:center; color:var(--text-faint); font-size:12.5px; padding:40px 12px; }
+
+  /* ---------- Painel de conversa ---------- */
+  .painel{ display:flex; flex-direction:column; min-width:0; }
+  .painel-vazio{ flex:1; display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:13.5px; flex-direction:column; gap:8px; }
+  .painel-vazio .icone{ font-size:34px; opacity:0.4; }
+
+  .chat-head{ padding:14px 20px; border-bottom:1px solid var(--line); background:var(--surface); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .chat-head-info h2{ font-size:14.5px; margin:0; font-family:var(--font-display); }
+  .chat-head-info p{ margin:3px 0 0; font-size:12px; color:var(--text-dim); }
+  .chat-head-acoes{ display:flex; gap:8px; }
+  .btn{
+    font-family:var(--font-body); font-size:12.5px; font-weight:600; border:none; border-radius:9px;
+    padding:9px 16px; cursor:pointer;
+  }
+  .btn-primario{ background:var(--fiber); color:#fff; }
+  .btn-perigo{ background:rgba(214,71,58,0.1); color:var(--alert); }
+  .btn:hover{ opacity:0.9; }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  .chat-corpo{ flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; }
+  .msg{ max-width:62%; padding:10px 14px; border-radius:14px; font-size:13.5px; line-height:1.45; }
+  .msg-tecnico{ align-self:flex-start; background:var(--surface-2); color:var(--text); border-bottom-left-radius:4px; }
+  .msg-atendente{ align-self:flex-end; background:var(--fiber); color:#fff; border-bottom-right-radius:4px; }
+  .msg-sistema{ align-self:center; background:transparent; color:var(--text-faint); font-size:11.5px; text-align:center; max-width:80%; }
+  .msg-hora{ font-size:10px; opacity:0.7; margin-top:4px; display:block; font-family:var(--font-mono); }
+
+  .composer{ padding:14px 20px; border-top:1px solid var(--line); background:var(--surface); display:flex; gap:10px; }
+  .composer textarea{
+    flex:1; resize:none; border:1px solid var(--line); border-radius:11px; padding:11px 14px;
+    font-family:var(--font-body); font-size:13.5px; outline:none; max-height:100px;
+  }
+  .composer textarea:focus{ border-color:var(--fiber); }
+  .composer button{
+    border:none; border-radius:11px; background:var(--fiber); color:#fff; padding:0 20px;
+    font-weight:600; cursor:pointer; font-size:13px;
+  }
+
+  .aguardando-acao{ padding:20px; border-top:1px solid var(--line); background:var(--surface); text-align:center; }
+  .aguardando-acao p{ font-size:12.5px; color:var(--text-dim); margin:0 0 12px; }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:99px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="quem">
+        <div class="avatar">{{ atendente_nome[:1] }}</div>
+        <div>
+          <div class="quem-nome">{{ atendente_nome }}</div>
+          <div class="quem-status">Disponível</div>
+        </div>
+      </div>
+      <a class="btn-logout" href="/logout">Sair</a>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="ativos">Ativos <span class="count" id="count-ativos">0</span></div>
+      <div class="tab" data-tab="aguardando">Aguardando <span class="count" id="count-aguardando">0</span></div>
+      <div class="tab" data-tab="finalizados">Finalizados <span class="count" id="count-finalizados">0</span></div>
+    </div>
+
+    <div class="lista" id="lista"></div>
+  </aside>
+
+  <section class="painel" id="painel">
+    <div class="painel-vazio" id="painel-vazio">
+      <div class="icone">💬</div>
+      <div>Escolha uma conversa na lista ao lado</div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// Estado
+// ---------------------------------------------------------------
+let ABA = 'ativos';
+let DADOS = { ativos: [], aguardando: [], finalizados: [] };
+let SELECIONADO = null; // protocolo
+let ULTIMA_QTD_MENSAGENS = 0;
+
+const STATUS_DA_ABA = { ativos: 'ativos', aguardando: 'aguardando', finalizados: 'finalizados' };
+
+// ---------------------------------------------------------------
+// Carrega lista de conversas
+// ---------------------------------------------------------------
+async function carregarLista(){
+  try{
+    const resp = await fetch('/api/inbox/tickets');
+    if(resp.status === 401){ window.location.href = '/login'; return; }
+    DADOS = await resp.json();
+    document.getElementById('count-ativos').textContent = DADOS.ativos.length;
+    document.getElementById('count-aguardando').textContent = DADOS.aguardando.length;
+    document.getElementById('count-finalizados').textContent = DADOS.finalizados.length;
+    renderLista();
+  }catch(e){ console.error('Erro ao carregar lista:', e); }
+}
+
+function iniciais(nome){
+  return (nome||'?').trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+}
+
+function renderLista(){
+  const lista = DADOS[ABA] || [];
+  const el = document.getElementById('lista');
+
+  if(!lista.length){
+    el.innerHTML = `<div class="vazio">${ABA==='ativos' ? 'Nenhuma conversa ativa no momento.' : ABA==='aguardando' ? 'Fila vazia — nada esperando.' : 'Nenhum atendimento finalizado ainda.'}</div>`;
+    return;
+  }
+
+  el.innerHTML = lista.map(t => {
+    const selecionada = t.protocolo === SELECIONADO ? 'selecionada' : '';
+    let metaBadge = '';
+    if(ABA === 'aguardando') metaBadge = `<span class="badge-mini espera">${t.espera_min} min</span>`;
+    else if(ABA === 'ativos' && t.espera_min != null) metaBadge = `<span class="badge-mini contrato">${t.espera_min} min</span>`;
+    return `
+      <div class="conversa ${selecionada}" data-protocolo="${t.protocolo}">
+        <div class="avatar">${iniciais(t.user_name)}</div>
+        <div class="conversa-info">
+          <div class="conversa-nome">${t.user_name || 'Técnico'}</div>
+          <div class="conversa-preview">${t.protocolo} · ${t.categoria || ''}${t.subcategoria ? ' / '+t.subcategoria : ''}</div>
+        </div>
+        <div class="conversa-meta">
+          <span class="conversa-tempo">${t.contrato || ''}</span>
+          ${metaBadge}
+        </div>
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('.conversa').forEach(div=>{
+    div.addEventListener('click', ()=> selecionar(div.dataset.protocolo));
+  });
+}
+
+document.querySelectorAll('.tab').forEach(tabEl=>{
+  tabEl.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tabEl.classList.add('active');
+    ABA = tabEl.dataset.tab;
+    renderLista();
+  });
+});
+
+// ---------------------------------------------------------------
+// Seleciona uma conversa e carrega as mensagens
+// ---------------------------------------------------------------
+function selecionar(protocolo){
+  SELECIONADO = protocolo;
+  ULTIMA_QTD_MENSAGENS = 0;
+  renderLista();
+  carregarConversa();
+}
+
+async function carregarConversa(silencioso){
+  if(!SELECIONADO) return;
+  try{
+    const resp = await fetch(`/api/inbox/ticket/${SELECIONADO}/mensagens`);
+    if(resp.status === 401){ window.location.href = '/login'; return; }
+    if(!resp.ok){
+      if(!silencioso) renderPainelErro((await resp.json()).erro || 'Não consegui abrir essa conversa.');
+      return;
+    }
+    const dados = await resp.json();
+    renderPainel(dados.ticket, dados.mensagens, silencioso);
+  }catch(e){ console.error('Erro ao carregar conversa:', e); }
+}
+
+function renderPainelErro(msg){
+  document.getElementById('painel').innerHTML = `<div class="painel-vazio"><div class="icone">⚠️</div><div>${msg}</div></div>`;
+}
+
+function renderPainel(ticket, mensagens, silencioso){
+  const painel = document.getElementById('painel');
+  const ehAtivo = ticket.status === 'em_atendimento';
+  const ehAguardando = ticket.status === 'aguardando';
+
+  // Só reconstrói o esqueleto do painel na primeira vez (silencioso=false);
+  // nas atualizações automáticas (silencioso=true) só atualiza as bolhas,
+  // pra não perder o texto que a pessoa já começou a digitar.
+  if(!silencioso){
+    painel.innerHTML = `
+      <div class="chat-head">
+        <div class="chat-head-info">
+          <h2>${ticket.user_name || 'Técnico'} · ${ticket.protocolo}</h2>
+          <p>${ticket.categoria || ''}${ticket.subcategoria ? ' / '+ticket.subcategoria : ''} · Contrato ${ticket.contrato || '–'}</p>
+        </div>
+        <div class="chat-head-acoes">
+          ${ehAguardando ? `<button class="btn btn-primario" id="btn-assumir">✅ Assumir conversa</button>` : ''}
+          ${ehAtivo ? `<button class="btn btn-perigo" id="btn-finalizar">Finalizar</button>` : ''}
+        </div>
+      </div>
+      <div class="chat-corpo" id="chat-corpo"></div>
+      ${ehAtivo ? `
+        <div class="composer">
+          <textarea id="campo-msg" rows="1" placeholder="Digite uma mensagem para o técnico…"></textarea>
+          <button id="btn-enviar">Enviar</button>
+        </div>` : ''}
+      ${ehAguardando ? `
+        <div class="aguardando-acao">
+          <p>Esse chamado ainda está na fila. Assuma pra poder conversar com o técnico.</p>
+        </div>` : ''}
+    `;
+
+    const btnAssumir = document.getElementById('btn-assumir');
+    if(btnAssumir) btnAssumir.addEventListener('click', () => assumirConversa(ticket.protocolo));
+
+    const btnFinalizar = document.getElementById('btn-finalizar');
+    if(btnFinalizar) btnFinalizar.addEventListener('click', () => finalizarConversa(ticket.protocolo));
+
+    const btnEnviar = document.getElementById('btn-enviar');
+    if(btnEnviar) btnEnviar.addEventListener('click', enviarMensagem);
+
+    const campoMsg = document.getElementById('campo-msg');
+    if(campoMsg) campoMsg.addEventListener('keydown', e=>{
+      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); enviarMensagem(); }
+    });
+  }
+
+  // Só re-renderiza as bolhas se o número de mensagens mudou (evita "piscar"
+  // a tela inteira a cada atualização automática).
+  if(mensagens.length !== ULTIMA_QTD_MENSAGENS){
+    const corpo = document.getElementById('chat-corpo');
+    if(corpo){
+      corpo.innerHTML = mensagens.map(m => {
+        const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+        if(m.sender_role === 'sistema') return `<div class="msg msg-sistema">${m.text || ''}<span class="msg-hora">${hora}</span></div>`;
+        const classe = m.sender_role === 'atendente' ? 'msg-atendente' : 'msg-tecnico';
+        const conteudo = m.text || (m.message_type === 'foto' ? '📷 Foto enviada' : m.message_type === 'localizacao' ? '📍 Localização enviada' : '');
+        return `<div class="msg ${classe}">${conteudo}<span class="msg-hora">${hora}</span></div>`;
+      }).join('');
+      corpo.scrollTop = corpo.scrollHeight;
+      ULTIMA_QTD_MENSAGENS = mensagens.length;
+    }
+  }
+}
+
+// ---------------------------------------------------------------
+// Ações
+// ---------------------------------------------------------------
+async function enviarMensagem(){
+  const campo = document.getElementById('campo-msg');
+  const texto = campo.value.trim();
+  if(!texto || !SELECIONADO) return;
+  campo.value = '';
+  campo.disabled = true;
+  try{
+    const resp = await fetch(`/api/inbox/ticket/${SELECIONADO}/enviar`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({texto}),
+    });
+    if(!resp.ok){
+      const erro = await resp.json();
+      alert(erro.erro || 'Não consegui enviar a mensagem.');
+      campo.value = texto;
+    } else {
+      await carregarConversa();
+    }
+  } finally {
+    campo.disabled = false;
+    campo.focus();
+  }
+}
+
+async function assumirConversa(protocolo){
+  try{
+    const resp = await fetch(`/api/inbox/ticket/${protocolo}/assumir`, { method:'POST' });
+    const dados = await resp.json();
+    if(!resp.ok){ alert(dados.erro || 'Não consegui assumir esse chamado.'); await carregarLista(); return; }
+    await carregarLista();
+    await carregarConversa();
+  }catch(e){ console.error(e); }
+}
+
+async function finalizarConversa(protocolo){
+  if(!confirm('Finalizar esse atendimento?')) return;
+  try{
+    const resp = await fetch(`/api/inbox/ticket/${protocolo}/finalizar`, { method:'POST' });
+    const dados = await resp.json();
+    if(!resp.ok){ alert(dados.erro || 'Não consegui finalizar esse chamado.'); return; }
+    await carregarLista();
+    await carregarConversa();
+  }catch(e){ console.error(e); }
+}
+
+// ---------------------------------------------------------------
+// Atualização periódica ("quase instantâneo": lista a cada 3s,
+// conversa aberta a cada 2s).
+// ---------------------------------------------------------------
+carregarLista();
+setInterval(carregarLista, 3000);
+setInterval(() => carregarConversa(true), 2000);
+</script>
+</body>
+</html>
