@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 import requests
 from psycopg.rows import dict_row
-from flask import Flask, jsonify, render_template, request, session, redirect, url_for
+from flask import Flask, jsonify, render_template, request, session, redirect, url_for, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -277,6 +277,41 @@ def api_inbox_mensagens(protocolo):
         "ticket": dict(ticket),
         "mensagens": [dict(m) for m in mensagens],
     })
+
+
+@app.route("/api/inbox/arquivo/<file_id>")
+@login_required
+def api_inbox_arquivo(file_id):
+    """
+    Repassa uma foto/arquivo do Telegram pro navegador, sem nunca expor o
+    token do bot pro lado do cliente (o link direto do Telegram inclui o
+    token na URL — se colocássemos isso num <img src>, qualquer atendente
+    veria o token no código-fonte da página).
+    """
+    meu_id = session["atendente_id"]
+
+    msg = fetchone("SELECT protocolo FROM messages WHERE file_id=%s", (file_id,))
+    if not msg:
+        return "Arquivo não encontrado.", 404
+
+    ticket = fetchone("SELECT atendente_id, status FROM tickets WHERE protocolo=%s", (msg["protocolo"],))
+    if ticket and ticket["status"] == "em_atendimento" and ticket["atendente_id"] != meu_id:
+        return "Sem permissão pra ver esse arquivo.", 403
+
+    try:
+        info = telegram_api("getFile", file_id=file_id)
+        file_path = info["file_path"]
+    except Exception:
+        return "Não consegui localizar esse arquivo no Telegram (pode ter expirado).", 404
+
+    try:
+        resp = requests.get(f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}", timeout=15)
+        resp.raise_for_status()
+    except Exception:
+        return "Não consegui baixar o arquivo do Telegram.", 502
+
+    content_type = resp.headers.get("Content-Type", "application/octet-stream")
+    return Response(resp.content, content_type=content_type, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.route("/api/inbox/ticket/<protocolo>/enviar", methods=["POST"])
