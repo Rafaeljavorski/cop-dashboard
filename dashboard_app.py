@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.rows import dict_row
@@ -12,6 +13,16 @@ if not DATABASE_URL:
 
 app = Flask(__name__)
 
+# O servidor (Railway) roda em UTC, não no horário de Brasília. O bot
+# (bot_cop_telegram.py) grava os timestamps já corrigidos pra Brasília
+# (naive, sem indicação de fuso) — esse painel precisa comparar "agora"
+# usando o MESMO ajuste, senão as contas de minutos ficam 3h erradas.
+TZ_BRASIL = ZoneInfo("America/Sao_Paulo")
+
+
+def agora():
+    return datetime.now(TZ_BRASIL).replace(tzinfo=None)
+
 
 def db():
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
@@ -22,7 +33,7 @@ def minutos(dt_iso):
         return 0
     try:
         dt = datetime.fromisoformat(str(dt_iso))
-        return int((datetime.now() - dt).total_seconds() // 60)
+        return int((agora() - dt).total_seconds() // 60)
     except Exception:
         return 0
 
@@ -45,21 +56,37 @@ def index():
 
 
 @app.route("/api/dashboard")
-def api_dashboard():
+@app.route("/api/dashboard/<int:dias>")
+def api_dashboard(dias=1):
+    dias = max(1, min(dias, 90))  # limite de segurança
+
+    # created_at/closed_at são gravados como TEXTO em formato ISO pelo bot
+    # ("AAAA-MM-DDTHH:MM:SS"). Nesse formato, comparação de texto já é
+    # equivalente a comparação cronológica, então calculamos o corte em
+    # Python (mais fácil de revisar do que depender de sintaxe de INTERVAL
+    # do Postgres) em vez de usar CURRENT_DATE fixo.
+    corte = (agora() - timedelta(days=dias - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat(timespec="seconds")
+
     resumo = {
         "aguardando": fetchone("SELECT COUNT(*) c FROM tickets WHERE status='aguardando'")["c"],
         "em_atendimento": fetchone("SELECT COUNT(*) c FROM tickets WHERE status='em_atendimento'")["c"],
         "finalizados_hoje": fetchone("""
             SELECT COUNT(*) c FROM tickets
             WHERE status='finalizado'
-            AND DATE(closed_at::timestamp)=CURRENT_DATE
-        """)["c"],
+            AND closed_at >= %s
+        """, (corte,))["c"],
         "total_hoje": fetchone("""
             SELECT COUNT(*) c FROM tickets
-            WHERE DATE(created_at::timestamp)=CURRENT_DATE
-        """)["c"],
+            WHERE created_at >= %s
+        """, (corte,))["c"],
     }
 
+    # "Aguardando" e "Em atendimento" mostram o estado ATUAL (agora mesmo),
+    # então continuam sem filtro de data — não faria sentido dizer "o que
+    # está esperando nos últimos 7 dias", só existe "o que está esperando
+    # agora".
     aguardando = fetchall("""
         SELECT protocolo, user_name, categoria, subcategoria, contrato, created_at, fotos
         FROM tickets
@@ -80,29 +107,29 @@ def api_dashboard():
         SELECT protocolo, user_name, categoria, subcategoria, contrato, atendente_nome, created_at, assumed_at, closed_at
         FROM tickets
         WHERE status='finalizado'
-        AND DATE(closed_at::timestamp)=CURRENT_DATE
+        AND closed_at >= %s
         ORDER BY closed_at DESC
-        LIMIT 50
-    """)
+        LIMIT 200
+    """, (corte,))
 
     ranking = fetchall("""
         SELECT atendente_nome, COUNT(*) total
         FROM tickets
         WHERE status='finalizado'
         AND atendente_nome IS NOT NULL
-        AND DATE(closed_at::timestamp)=CURRENT_DATE
+        AND closed_at >= %s
         GROUP BY atendente_nome
         ORDER BY total DESC
         LIMIT 20
-    """)
+    """, (corte,))
 
     por_fila = fetchall("""
         SELECT categoria, COUNT(*) total
         FROM tickets
-        WHERE DATE(created_at::timestamp)=CURRENT_DATE
+        WHERE created_at >= %s
         GROUP BY categoria
         ORDER BY total DESC
-    """)
+    """, (corte,))
 
     ultimos = fetchall("""
         SELECT protocolo, user_name, categoria, subcategoria, status, atendente_nome, created_at, closed_at
@@ -148,7 +175,8 @@ def api_dashboard():
         "ranking": [dict(x) for x in ranking],
         "por_fila": [dict(x) for x in por_fila],
         "ultimos": [dict(x) for x in ultimos],
-        "atualizado_em": datetime.now().strftime("%H:%M:%S")
+        "periodo_dias": dias,
+        "atualizado_em": agora().strftime("%H:%M:%S")
     })
 
 
