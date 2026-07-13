@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — senhas dos atendentes</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#F4F7F9; --surface:#FFFFFF; --line:#DCE3E8; --text:#16232C; --text-dim:#5B6B76; --fiber:#16A99C; --alert:#D6473A; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; padding:60px 20px; }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px; width:100%; max-width:420px; }
+  h1{ font-size:16px; margin:0 0 18px; }
+  label{ display:block; font-size:12.5px; font-weight:600; color:var(--text-dim); margin:12px 0 6px; }
+  input, select{ width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); font-size:14px; }
+  button{ margin-top:18px; width:100%; padding:11px; border:none; border-radius:8px; background:var(--fiber); color:#fff; font-weight:600; cursor:pointer; }
+  .msg{ margin-top:14px; padding:10px 12px; border-radius:8px; font-size:13px; background:rgba(22,169,156,0.08); color:var(--fiber); }
+  .msg.erro{ background:rgba(214,71,58,0.08); color:var(--alert); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔐 Definir senha de atendente</h1>
+    <form method="POST">
+      {% if not autenticado %}
+        <label for="admin_secret">Senha de administrador</label>
+        <input type="password" id="admin_secret" name="admin_secret" required autofocus>
+        <button type="submit">Entrar</button>
+      {% else %}
+        <label for="nome">Atendente</label>
+        <select id="nome" name="nome" required>
+          {% for a in atendentes %}<option value="{{ a.nome }}">{{ a.nome }}</option>{% endfor %}
+        </select>
+        <label for="nova_senha">Nova senha (mín. 4 caracteres)</label>
+        <input type="text" id="nova_senha" name="nova_senha" required>
+        <button type="submit">Salvar senha</button>
+      {% endif %}
+      {% if mensagem %}<div class="msg {{ 'erro' if 'incorreta' in mensagem or 'pelo menos' in mensagem or 'achei' in mensagem else '' }}">{{ mensagem }}</div>{% endif %}
+    </form>
+  </div>
+</body>
+</html>
