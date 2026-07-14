@@ -396,6 +396,64 @@ def api_inbox_enviar(protocolo):
     return jsonify({"ok": True})
 
 
+def reenviar_historico_para_topico(protocolo, thread_id, grupo_id):
+    """
+    Mesma lógica do bot do Telegram (reenviar_historico_para_topico): quando
+    um tópico é criado agora (porque o chamado foi assumido pelo painel
+    web), ele nasce vazio -- sem isso, tudo que o técnico já tinha mandado
+    ANTES de alguém assumir (fotos, localização, texto da triagem inicial)
+    fica invisível pra quem olhar direto no Telegram.
+    """
+    if not thread_id:
+        return
+
+    ticket = fetchone("SELECT historico_enviado FROM tickets WHERE protocolo=%s", (protocolo,))
+    if ticket and ticket.get("historico_enviado"):
+        return
+
+    msgs = fetchall(
+        "SELECT * FROM messages WHERE protocolo=%s AND sender_role='tecnico' ORDER BY id ASC",
+        (protocolo,),
+    )
+
+    if not msgs:
+        executar("UPDATE tickets SET historico_enviado=1 WHERE protocolo=%s", (protocolo,))
+        return
+
+    try:
+        telegram_api(
+            "sendMessage", chat_id=grupo_id, message_thread_id=thread_id,
+            text="📎 *Histórico/evidências enviados pelo técnico:*", parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.warning("Falha ao enviar cabeçalho do histórico de %s: %s", protocolo, e)
+
+    for m in msgs:
+        try:
+            legenda = f"📩 {protocolo} - {m['sender_name']}"
+            if m.get("text"):
+                legenda += f"\n\n{m['text']}"
+
+            tipo = m.get("message_type")
+            if tipo == "text":
+                telegram_api("sendMessage", chat_id=grupo_id, message_thread_id=thread_id, text=legenda)
+            elif tipo == "photo":
+                telegram_api("sendPhoto", chat_id=grupo_id, message_thread_id=thread_id, photo=m["file_id"], caption=legenda)
+            elif tipo == "document":
+                telegram_api("sendDocument", chat_id=grupo_id, message_thread_id=thread_id, document=m["file_id"], caption=legenda)
+            elif tipo == "video":
+                telegram_api("sendVideo", chat_id=grupo_id, message_thread_id=thread_id, video=m["file_id"], caption=legenda)
+            elif tipo == "voice":
+                telegram_api("sendVoice", chat_id=grupo_id, message_thread_id=thread_id, voice=m["file_id"], caption=legenda)
+            elif tipo == "location":
+                telegram_api("sendLocation", chat_id=grupo_id, message_thread_id=thread_id, latitude=m["latitude"], longitude=m["longitude"])
+                telegram_api("sendMessage", chat_id=grupo_id, message_thread_id=thread_id, text=legenda)
+        except Exception as e:
+            logger.warning("Falha ao reenviar item do histórico de %s: %s", protocolo, e)
+
+    executar("UPDATE tickets SET historico_enviado=1 WHERE protocolo=%s", (protocolo,))
+
+
 @app.route("/api/inbox/ticket/<protocolo>/assumir", methods=["POST"])
 @login_required
 def api_inbox_assumir(protocolo):
@@ -444,6 +502,11 @@ def api_inbox_assumir(protocolo):
         """,
         (meu_id, meu_nome, agora_str, agora_str, grupo_id, thread_id, protocolo),
     )
+
+    # Replica pro tópico novo o que o técnico já tinha mandado antes de
+    # alguém assumir -- sem isso, o tópico nasce vazio no lado do Telegram,
+    # mesmo com o painel web mostrando a conversa completa.
+    reenviar_historico_para_topico(protocolo, thread_id, grupo_id)
 
     try:
         telegram_api(
