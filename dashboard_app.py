@@ -34,6 +34,20 @@ if not TELEGRAM_BOT_TOKEN:
 # administra o sistema.
 ADMIN_SECRET = os.getenv("ADMIN_SECRET")
 
+# MESMA variável ADM_IDS que o bot já usa (Settings → Variables do serviço
+# do bot, copia o valor) — assim quem é admin lá também é admin aqui, sem
+# duplicar cadastro. Formato: IDs do Telegram separados por vírgula.
+ADM_IDS = [
+    int(x.strip())
+    for x in os.getenv("ADM_IDS", "").split(",")
+    if x.strip()
+]
+
+
+def eh_admin(user_id):
+    return user_id in ADM_IDS
+
+
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
@@ -213,13 +227,38 @@ def inbox():
 @login_required
 def api_inbox_tickets():
     meu_id = session["atendente_id"]
+    sou_admin = eh_admin(meu_id)
 
-    ativos = fetchall("""
-        SELECT protocolo, user_name, categoria, subcategoria, contrato, created_at, assumed_at, last_message_at
-        FROM tickets
-        WHERE status='em_atendimento' AND atendente_id=%s
-        ORDER BY last_message_at DESC NULLS LAST, assumed_at DESC
-    """, (meu_id,))
+    if sou_admin:
+        # Admin enxerga o trabalho de todo mundo, não só o próprio — mesmo
+        # princípio de "Gestão ADM" no bot do Telegram.
+        ativos = fetchall("""
+            SELECT protocolo, user_name, categoria, subcategoria, contrato, created_at, assumed_at, last_message_at, atendente_nome
+            FROM tickets
+            WHERE status='em_atendimento'
+            ORDER BY last_message_at DESC NULLS LAST, assumed_at DESC
+        """)
+        finalizados = fetchall("""
+            SELECT protocolo, user_name, categoria, subcategoria, contrato, closed_at, atendente_nome
+            FROM tickets
+            WHERE status='finalizado'
+            ORDER BY closed_at DESC
+            LIMIT 50
+        """)
+    else:
+        ativos = fetchall("""
+            SELECT protocolo, user_name, categoria, subcategoria, contrato, created_at, assumed_at, last_message_at, atendente_nome
+            FROM tickets
+            WHERE status='em_atendimento' AND atendente_id=%s
+            ORDER BY last_message_at DESC NULLS LAST, assumed_at DESC
+        """, (meu_id,))
+        finalizados = fetchall("""
+            SELECT protocolo, user_name, categoria, subcategoria, contrato, closed_at, atendente_nome
+            FROM tickets
+            WHERE status='finalizado' AND atendente_id=%s
+            ORDER BY closed_at DESC
+            LIMIT 50
+        """, (meu_id,))
 
     aguardando = fetchall("""
         SELECT protocolo, user_name, categoria, subcategoria, contrato, created_at
@@ -227,14 +266,6 @@ def api_inbox_tickets():
         WHERE status='aguardando'
         ORDER BY id ASC
     """)
-
-    finalizados = fetchall("""
-        SELECT protocolo, user_name, categoria, subcategoria, contrato, closed_at
-        FROM tickets
-        WHERE status='finalizado' AND atendente_id=%s
-        ORDER BY closed_at DESC
-        LIMIT 50
-    """, (meu_id,))
 
     ativos_out = []
     for r in ativos:
@@ -252,6 +283,7 @@ def api_inbox_tickets():
         "ativos": ativos_out,
         "aguardando": aguardando_out,
         "finalizados": [dict(r) for r in finalizados],
+        "sou_admin": sou_admin,
         "atualizado_em": agora().strftime("%H:%M:%S"),
     })
 
@@ -263,7 +295,7 @@ def api_inbox_mensagens(protocolo):
     ticket = fetchone("SELECT * FROM tickets WHERE protocolo=%s", (protocolo,))
     if not ticket:
         return jsonify({"erro": "chamado não encontrado"}), 404
-    if ticket["status"] == "em_atendimento" and ticket["atendente_id"] != meu_id:
+    if ticket["status"] == "em_atendimento" and ticket["atendente_id"] != meu_id and not eh_admin(meu_id):
         return jsonify({"erro": "esse chamado é de outro atendente"}), 403
 
     mensagens = fetchall("""
@@ -295,7 +327,7 @@ def api_inbox_arquivo(file_id):
         return "Arquivo não encontrado.", 404
 
     ticket = fetchone("SELECT atendente_id, status FROM tickets WHERE protocolo=%s", (msg["protocolo"],))
-    if ticket and ticket["status"] == "em_atendimento" and ticket["atendente_id"] != meu_id:
+    if ticket and ticket["status"] == "em_atendimento" and ticket["atendente_id"] != meu_id and not eh_admin(meu_id):
         return "Sem permissão pra ver esse arquivo.", 403
 
     try:
@@ -326,7 +358,9 @@ def api_inbox_enviar(protocolo):
     ticket = fetchone("SELECT * FROM tickets WHERE protocolo=%s", (protocolo,))
     if not ticket:
         return jsonify({"erro": "chamado não encontrado"}), 404
-    if ticket["status"] != "em_atendimento" or ticket["atendente_id"] != meu_id:
+    if ticket["status"] != "em_atendimento":
+        return jsonify({"erro": "esse chamado não está em atendimento"}), 403
+    if ticket["atendente_id"] != meu_id and not eh_admin(meu_id):
         return jsonify({"erro": "você não é o responsável por esse chamado"}), 403
 
     cabecalho = f"📩 {protocolo} - COP {meu_nome}"
@@ -431,7 +465,7 @@ def api_inbox_finalizar(protocolo):
     ticket = fetchone("SELECT * FROM tickets WHERE protocolo=%s", (protocolo,))
     if not ticket:
         return jsonify({"erro": "chamado não encontrado"}), 404
-    if ticket["atendente_id"] != meu_id:
+    if ticket["atendente_id"] != meu_id and not eh_admin(meu_id):
         return jsonify({"erro": "você não é o responsável por esse chamado"}), 403
 
     linhas = executar_retornando(
