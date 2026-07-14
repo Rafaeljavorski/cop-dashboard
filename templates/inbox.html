@@ -65,6 +65,7 @@
   .badge-mini{ font-size:9.5px; padding:2px 7px; border-radius:999px; font-weight:600; white-space:nowrap; }
   .badge-mini.espera{ background:rgba(184,114,14,0.14); color:var(--amber); }
   .badge-mini.contrato{ background:var(--surface-2); color:var(--text-faint); }
+  .badge-mini.outro-atendente{ background:rgba(46,79,209,0.12); color:var(--done); }
   .vazio{ text-align:center; color:var(--text-faint); font-size:12.5px; padding:40px 12px; }
 
   /* ---------- Painel de conversa ---------- */
@@ -151,6 +152,7 @@
 // ---------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------
+const MEU_NOME = {{ atendente_nome|tojson }};
 let ABA = 'ativos';
 let DADOS = { ativos: [], aguardando: [], finalizados: [] };
 let SELECIONADO = null; // protocolo
@@ -191,6 +193,9 @@ function renderLista(){
     let metaBadge = '';
     if(ABA === 'aguardando') metaBadge = `<span class="badge-mini espera">${t.espera_min} min</span>`;
     else if(ABA === 'ativos' && t.espera_min != null) metaBadge = `<span class="badge-mini contrato">${t.espera_min} min</span>`;
+    // Se for um chamado de outra pessoa (visível pra admin), mostra de quem é.
+    const deOutraPessoa = t.atendente_nome && t.atendente_nome !== MEU_NOME
+      ? `<span class="badge-mini outro-atendente">${t.atendente_nome}</span>` : '';
     return `
       <div class="conversa ${selecionada}" data-protocolo="${t.protocolo}">
         <div class="avatar">${iniciais(t.user_name)}</div>
@@ -201,6 +206,7 @@ function renderLista(){
         <div class="conversa-meta">
           <span class="conversa-tempo">${t.contrato || ''}</span>
           ${metaBadge}
+          ${deOutraPessoa}
         </div>
       </div>`;
   }).join('');
@@ -256,11 +262,13 @@ function renderPainel(ticket, mensagens, silencioso){
   // nas atualizações automáticas (silencioso=true) só atualiza as bolhas,
   // pra não perder o texto que a pessoa já começou a digitar.
   if(!silencioso){
+    const deOutraPessoa = ticket.atendente_nome && ticket.atendente_nome !== MEU_NOME
+      ? ` · atendido por ${ticket.atendente_nome}` : '';
     painel.innerHTML = `
       <div class="chat-head">
         <div class="chat-head-info">
           <h2>${ticket.user_name || 'Técnico'} · ${ticket.protocolo}</h2>
-          <p>${ticket.categoria || ''}${ticket.subcategoria ? ' / '+ticket.subcategoria : ''} · Contrato ${ticket.contrato || '–'}</p>
+          <p>${ticket.categoria || ''}${ticket.subcategoria ? ' / '+ticket.subcategoria : ''} · Contrato ${ticket.contrato || '–'}${deOutraPessoa}</p>
         </div>
         <div class="chat-head-acoes">
           ${ehAguardando ? `<button class="btn btn-primario" id="btn-assumir">✅ Assumir conversa</button>` : ''}
