@@ -396,6 +396,30 @@ def api_inbox_enviar(protocolo):
     return jsonify({"ok": True})
 
 
+def agrupar_fotos_consecutivas(msgs):
+    """
+    Mesma lógica do bot do Telegram: divide a lista em blocos, juntando
+    fotos consecutivas (até 10, limite da API) num só bloco -- pra mandar
+    como álbum em vez de uma bolha por foto.
+    """
+    blocos = []
+    i = 0
+    while i < len(msgs):
+        m = msgs[i]
+        if m.get("message_type") == "photo":
+            grupo = [m]
+            j = i + 1
+            while j < len(msgs) and msgs[j].get("message_type") == "photo" and len(grupo) < 10:
+                grupo.append(msgs[j])
+                j += 1
+            blocos.append(("fotos", grupo))
+            i = j
+        else:
+            blocos.append(("unico", m))
+            i += 1
+    return blocos
+
+
 def reenviar_historico_para_topico(protocolo, thread_id, grupo_id):
     """
     Mesma lógica do bot do Telegram (reenviar_historico_para_topico): quando
@@ -428,8 +452,28 @@ def reenviar_historico_para_topico(protocolo, thread_id, grupo_id):
     except Exception as e:
         logger.warning("Falha ao enviar cabeçalho do histórico de %s: %s", protocolo, e)
 
-    for m in msgs:
+    for tipo_bloco, item in agrupar_fotos_consecutivas(msgs):
         try:
+            if tipo_bloco == "fotos":
+                grupo = item
+                if len(grupo) == 1:
+                    m = grupo[0]
+                    legenda = f"📩 {protocolo} - {m['sender_name']}"
+                    if m.get("text"):
+                        legenda += f"\n\n{m['text']}"
+                    telegram_api("sendPhoto", chat_id=grupo_id, message_thread_id=thread_id, photo=m["file_id"], caption=legenda)
+                else:
+                    # sendMediaGroup só aceita legenda no primeiro item —
+                    # o Telegram mostra ela como legenda do álbum inteiro.
+                    primeira_legenda = f"📩 {protocolo} - {grupo[0]['sender_name']}"
+                    media = [
+                        {"type": "photo", "media": g["file_id"], **({"caption": primeira_legenda} if idx == 0 else {})}
+                        for idx, g in enumerate(grupo)
+                    ]
+                    telegram_api("sendMediaGroup", chat_id=grupo_id, message_thread_id=thread_id, media=media)
+                continue
+
+            m = item
             legenda = f"📩 {protocolo} - {m['sender_name']}"
             if m.get("text"):
                 legenda += f"\n\n{m['text']}"
@@ -437,8 +481,6 @@ def reenviar_historico_para_topico(protocolo, thread_id, grupo_id):
             tipo = m.get("message_type")
             if tipo == "text":
                 telegram_api("sendMessage", chat_id=grupo_id, message_thread_id=thread_id, text=legenda)
-            elif tipo == "photo":
-                telegram_api("sendPhoto", chat_id=grupo_id, message_thread_id=thread_id, photo=m["file_id"], caption=legenda)
             elif tipo == "document":
                 telegram_api("sendDocument", chat_id=grupo_id, message_thread_id=thread_id, document=m["file_id"], caption=legenda)
             elif tipo == "video":
